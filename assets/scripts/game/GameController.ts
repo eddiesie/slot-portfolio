@@ -1,4 +1,3 @@
-// assets/scripts/game/GameController.ts
 import { _decorator, Component, Node, SpriteFrame, tween, Vec3, director } from 'cc';
 import { Reel } from './Reel';
 import { evaluateMiddleRowCount, MiddleRowCountWin } from './PayoutEvaluator';
@@ -18,7 +17,6 @@ export class GameController extends Component {
   @property({ tooltip: '向右每條多加的步數（形成依序停下）' })
   stepOffsetPerReel = 5;
 
-  // ⚠️ 重點：用 {type: PaytableConfig} 暴露到 Inspector
   @property({ type: PaytableConfig, tooltip: '拖入 PaytableConfig；若留空會自動掃描場景取得' })
   paytable: PaytableConfig | null = null;
 
@@ -35,7 +33,6 @@ export class GameController extends Component {
     this._ensurePaytable();
   }
 
-  /** 掃描整個場景找掛了 PaytableConfig 的節點（名稱不限） */
   private _ensurePaytable() {
     if (this.paytable) return;
     const scene = director.getScene();
@@ -58,7 +55,7 @@ export class GameController extends Component {
     this._spinning = true;
     this._finishCallback = finished;
 
-    this._ensurePaytable(); // 再保險掃一次
+    this._ensurePaytable();
 
     if (!this.paytable) {
       console.warn('[GameController] 未設定 PaytableConfig，將使用等機率與 0 倍率。');
@@ -84,7 +81,6 @@ export class GameController extends Component {
       const fill = Math.max(0, steps - 3);
       const feed: SpriteFrame[] = [];
       for (let k = 0; k < fill; k++) feed.push(randFrame());
-      // 無跳圖：最後三張 = 最終結果（上→中→下）
       feed.push(topF, midF, botF);
 
       reel.spin(steps, feed, [topF, midF, botF], () => {
@@ -113,7 +109,6 @@ export class GameController extends Component {
 
   public quickStop() { for (const r of this._reels) r.quickStop(); }
 
-  /** 以 paytable 權重抽樣產生 5x3 盤面（沒有 paytable 時改用等機率） */
   private _generateWeightedGrid(): number[][] {
     const REEL_COUNT = 5, ROW_COUNT = 3;
     const grid: number[][] = [];

@@ -2,10 +2,6 @@ import { _decorator, Component, Node, Vec3, tween, SpriteFrame } from 'cc';
 import { SymbolView } from './SymbolView';
 const { ccclass, property } = _decorator;
 
-/**
- * 無跳圖：在每一步「開始之前」就先把最低的格子搬到最上方，並設定成 feed 的下一張，
- * 然後三格一起往下滾動一格。這樣每一步結束時，畫面就是最終要看到的圖，不會在停輪時突變。
- */
 @ccclass('Reel')
 export class Reel extends Component {
   @property({ tooltip: '每格高度（需與三格之間的 Y 間距一致）' })
@@ -31,13 +27,11 @@ export class Reel extends Component {
     this._cells = top && mid && bot ? [top, mid, bot] : [...this.node.children];
   }
 
-  /** 依目前 y 位置，回傳當前可見的 上(0)/中(1)/下(2) 節點 */
   public getVisibleNodeAtRow(rowIndex: 0 | 1 | 2): Node {
     const sorted = [...this._cells].sort((a, b) => b.position.y - a.position.y);
-    return sorted[rowIndex]; // 0=最高(上),1=中,2=最低(下)
+    return sorted[rowIndex];
   }
 
-  /** 啟動轉動（feed 最後三張必須是 [top, mid, bot] 最終結果） */
   spin(
     totalSteps: number,
     feed: SpriteFrame[],
@@ -51,17 +45,16 @@ export class Reel extends Component {
     [this._resultTop, this._resultMid, this._resultBot] = resultTopMidBot;
     this._onStop = onStop;
 
-    this._step(); // 進入第一步
+    this._step();
   }
 
-  /** 快速停：把剩餘步數縮到 ≤3，並將 feed 裁切成能在最後 1~3 步內正好落到 [top, mid, bot] */
   quickStop() {
     if (!this._isSpinning) return;
     const r = Math.min(this._stepsLeft, 3);
     this._stepsLeft = r;
     if (r <= 0 || !this._resultTop || !this._resultMid || !this._resultBot) return;
     const seq: SpriteFrame[] = [this._resultTop, this._resultMid, this._resultBot];
-    this._feed = seq.slice(3 - r); // r=3->[top,mid,bot]；r=2->[mid,bot]；r=1->[bot]
+    this._feed = seq.slice(3 - r);
   }
 
   get isSpinning() { return this._isSpinning; }
@@ -69,7 +62,6 @@ export class Reel extends Component {
   private _step() {
     if (this._stepsLeft <= 0) {
       this._isSpinning = false;
-      // 小彈跳（僅 Y 軸，不動 X/Z）
       const bounce = 10;
       const p0 = this.node.position.clone();
       tween(this.node)
@@ -82,21 +74,17 @@ export class Reel extends Component {
 
     this._stepsLeft--;
 
-    // ★★★ 無跳圖關鍵：先把「最底的格子」搬到最上面，並設定成下一張圖，再進行本步的下滾動畫
     let bottomIdx = 0;
     for (let i = 1; i < this._cells.length; i++) {
       if (this._cells[i].position.y < this._cells[bottomIdx].position.y) bottomIdx = i;
     }
     const bottom = this._cells[bottomIdx];
     const maxY = Math.max(...this._cells.map(c => c.position.y));
-    // 放到最高點之上（下一步滾動後會正好落到最上排可見）
     bottom.setPosition(new Vec3(0, maxY + this.symbolHeight, 0));
 
-    // 先塞入下一張要出現的圖（若 feed 空則沿用最後一張）
     const nextFrame = this._feed.length > 0 ? this._feed.shift()! : (this._feed[this._feed.length - 1] ?? null);
     if (nextFrame) bottom.getComponent(SymbolView)?.setSymbol(nextFrame);
 
-    // 現在三格同時往下滑一格——這一步結束後，畫面就是「剛塞好的圖」要顯示的樣子
     let finished = 0;
     for (const cell of this._cells) {
       const from = cell.position.clone();
@@ -106,7 +94,7 @@ export class Reel extends Component {
         .call(() => {
           finished++;
           if (finished === this._cells.length) {
-            this._step(); // 進下一步
+            this._step();
           }
         })
         .start();

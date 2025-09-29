@@ -1,14 +1,12 @@
-// assets/scripts/game/PayoutEvaluator.ts
 import { PaytableConfig } from '../data/PaytableConfig';
 
 export interface MiddleRowCountWin {
-  count: number;        // 該符號在中排出現幾次（3/4/5）
-  symbol: number;       // 中獎符號 id
-  payout: number;       // 實際得分（已乘 betPerLine）
-  positions: number[];  // 中排中：該符號出現的欄索引（用於高亮）
+  count: number;
+  symbol: number;
+  payout: number;
+  positions: number[];
 }
 
-/** 只看中排、不需連續；多個同時達標時取「最高獎」（單一筆） */
 export function evaluateMiddleRowCount(
   grid: number[][],
   betPerLine: number,
