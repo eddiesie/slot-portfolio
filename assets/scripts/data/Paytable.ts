@@ -1,6 +1,6 @@
 // assets/scripts/data/Paytable.ts
 
-/** 你的 symbolFrames 排序請對齊這個 enum 的索引 */
+/** symbolFrames 排序請對齊這個 enum 的索引 */
 export enum SymbolId {
     Blue = 0,
     Green = 1,
@@ -27,7 +27,7 @@ export enum SymbolId {
     [SymbolId.Orange]:   { 3: 10, 4: 20, 5: 50 },
     [SymbolId.Purple]:   { 3: 10, 4: 20, 5: 50 },
     [SymbolId.Red]:      { 3: 10, 4: 20, 5: 50 },
-    [SymbolId.Lollipop]: { 3:100, 4:250, 5:1000 }, // 若想 4 個才算，把 3:100 改成 0
+    [SymbolId.Lollipop]: { 3:100, 4:250, 5:1000 }, // 如需要 4 個才算，把 3:100 改成 0
   };
   
   /** 依權重加權抽一個符號 id（0..N-1） */
