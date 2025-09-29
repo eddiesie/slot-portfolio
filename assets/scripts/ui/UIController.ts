@@ -1,175 +1,184 @@
 // assets/scripts/ui/UIController.ts
-import { _decorator, Component, Label, Button, Node, UIOpacity, tween } from 'cc';
+import { _decorator, Component, Label, Button, tween, UIOpacity } from 'cc';
 import { GameController } from '../game/GameController';
+import { WinMessageConfig } from '../data/WinMessageConfig';
 const { ccclass, property } = _decorator;
-
-type WinDetail = { symbol: number; count: number; payout: number } | null;
 
 @ccclass('UIController')
 export class UIController extends Component {
-  @property(Label) balanceLabel: Label | null = null;
-  @property(Label) betLabel: Label | null = null;
-  @property(Label) winLabel: Label | null = null;
+  // ====== 文字顯示 ======
+  @property({ type: Label, tooltip: '餘額顯示 Label' })
+  balanceLabel: Label | null = null;
 
-  @property(Button) spinButton: Button | null = null;
-  @property(Button) stopButton: Button | null = null;
-  @property(Button) betMinus: Button | null = null;
-  @property(Button) betPlus: Button | null = null;
-  @property(Button) maxBet: Button | null = null;
-  @property(Button) autoBtn: Button | null = null;
+  @property({ type: Label, tooltip: '押注顯示 Label' })
+  betLabel: Label | null = null;
 
-  @property(GameController) game: GameController | null = null;
+  @property({ type: Label, tooltip: '贏分顯示 Label（單一 Label）' })
+  winLabel: Label | null = null;
 
-  // === Win Toast ===
-  @property(Node) winToastNode: Node | null = null;
-  @property(Label) winToastLabel: Label | null = null;
+  // ====== 按鈕 ======
+  @property({ type: Button }) spinButton: Button | null = null;
+  @property({ type: Button }) stopButton: Button | null = null;
+  @property({ type: Button }) betMinus: Button | null = null;
+  @property({ type: Button }) betPlus: Button | null = null;
+  @property({ type: Button }) maxBet: Button | null = null;
+  @property({ type: Button }) autoBtn: Button | null = null;
 
-  // === 狀態 ===
-  private balance = 1000;
-  private betPerLine = 1;
-  private linesCount = 10; // 目前固定 10（只算中排；這裡代表總押注=betPerLine*10）
-  private lastWin = 0;
-  private spinning = false;
+  // ====== 遊戲控制 ======
+  @property({ type: GameController, tooltip: '拖入 GameController 節點' })
+  game: GameController | null = null;
 
-  // === Auto 模式 ===
-  private autoEnabled = false;
-  @property({ tooltip: 'Auto 模式每局間隔秒數' })
-  private autoDelaySec = 0.35;
+  // ====== 中獎訊息（可選） ======
+  @property({ type: WinMessageConfig, tooltip: '拖入 WinMessageConfig 節點（可選）' })
+  messageConfig: WinMessageConfig | null = null;
 
-  start() {
-    this.refreshUI();
-    this.updateButtons();
+  // ====== 吐司 ======
+  @property({ type: Label, tooltip: '吐司訊息 Label（UI/WinToast/Label）' })
+  winToastLabel: Label | null = null;
+
+  @property({ tooltip: '吐司顯示秒數' })
+  toastSeconds = 1.6;
+
+  // ====== 顯示前綴 ======
+  @property({ tooltip: 'WinLabel 的前綴文字' })
+  winPrefix = '贏分：';
+
+  // ====== 狀態 ======
+  private _balance = 1000;
+  private _bet = 10;
+  private _spinning = false;
+  private _autoMode = false;
+
+  onLoad() {
+    this._refreshStaticTexts();
+    this._setWinLabel(0); // 初始化顯示「贏分：0」
+    this._setupToastOpacity();
+    this._toggleButtons(false); // 初始可點 SPIN、不可點 STOP
   }
 
-  public onBetPlus() {
-    if (this.spinning || this.autoEnabled) return;
-    this.betPerLine = Math.min(this.betPerLine + 1, 10);
-    this.refreshUI();
-  }
-
-  public onBetMinus() {
-    if (this.spinning || this.autoEnabled) return;
-    this.betPerLine = Math.max(this.betPerLine - 1, 1);
-    this.refreshUI();
-  }
-
-  public onMaxBet() {
-    if (this.spinning || this.autoEnabled) return;
-    this.betPerLine = 10;
-    this.refreshUI();
-  }
-
+  // ----------------- UI 事件 -----------------
   public onSpin() {
-    if (this.spinning) return;
+    if (this._spinning || !this.game) return;
+    if (this._balance < this._bet) { this._showToast('餘額不足'); return; }
 
-    const totalBet = this.betPerLine * this.linesCount;
-    if (this.balance < totalBet) {
-      console.warn('餘額不足，無法旋轉');
-      // 自動模式下，若餘額不足，直接關閉 auto
-      if (this.autoEnabled) {
-        this.autoEnabled = false;
-        this.updateButtons();
+    this._spinning = true;
+    this._balance -= this._bet;
+    this._refreshStaticTexts();
+    this._setWinLabel(0);               // 開始轉就先清零，保留前綴
+    this._toggleButtons(true);          // 鎖住大部分按鈕，只留 STOP
+
+    this.game.spin(
+      this._bet,
+      () => { /* 可加啟動音效等 */ },
+      (win, detail) => {
+        // 結算
+        if (win > 0) {
+          this._balance += win;
+          this._showWinMessage(detail?.symbol ?? -1, detail?.count ?? 0, win);
+        } else {
+          this._showToast('未中獎');
+        }
+        this._setWinLabel(win);
+
+        this._spinning = false;
+        this._toggleButtons(false);
+        this._refreshStaticTexts();
+
+        // 簡單 Auto（若之後要做進階版，可在這裡循環呼叫）
+        if (this._autoMode) {
+          // 小延遲避免過快
+          setTimeout(() => this.onSpin(), 150);
+        }
       }
-      return;
-    }
-
-    this.balance -= totalBet;
-    this.lastWin = 0;
-    this.spinning = true;
-    this.refreshUI();
-    this.updateButtons();
-
-    this.game?.spin(
-      this.betPerLine,
-      () => {}, // started
-      (win, detail) => this.roundFinished(win, detail)
     );
   }
 
   public onStop() {
-    if (!this.spinning && !this.autoEnabled) return;
-    // Stop 同時關閉 Auto，並嘗試快速停當前局
-    this.autoEnabled = false;
-    this.game?.quickStop();
-    this.updateButtons();
+    // 轉動中才有作用
+    if (this._spinning) this.game?.quickStop();
+  }
+
+  public onBetMinus() {
+    if (this._spinning) return;
+    this._bet = Math.max(1, this._bet - 1);
+    this._refreshStaticTexts();
+  }
+
+  public onBetPlus() {
+    if (this._spinning) return;
+    this._bet += 1;
+    this._refreshStaticTexts();
+  }
+
+  public onMaxBet() {
+    if (this._spinning) return;
+    this._bet = 50;
+    this._refreshStaticTexts();
   }
 
   public onAuto() {
-    this.autoEnabled = !this.autoEnabled;
-    this.updateButtons();
+    // 先做簡單切換（可擴充為 UI 高亮/停用其它按鈕）
+    this._autoMode = !this._autoMode;
+    this._showToast(this._autoMode ? '自動開始' : '自動停止');
+    if (this._autoMode && !this._spinning) this.onSpin();
+  }
 
-    // 如果剛打開 Auto 且目前沒有在轉，立刻開始第一局
-    if (this.autoEnabled && !this.spinning) {
-      this.onSpin();
+  // ----------------- 顯示/輔助 -----------------
+  private _refreshStaticTexts() {
+    if (this.balanceLabel) this.balanceLabel.string = `餘額：${this._balance}`;
+    if (this.betLabel) this.betLabel.string = `押注：${this._bet}`;
+    // 不覆蓋 winLabel，避免把前綴蓋掉
+  }
+
+  private _setWinLabel(value: number) {
+    if (this.winLabel) this.winLabel.string = `${this.winPrefix}${value}`;
+  }
+
+  private _toggleButtons(spinning: boolean) {
+    // SPIN 轉動中不可按；STOP 轉動中可按
+    if (this.spinButton) this.spinButton.interactable = !spinning;
+    if (this.stopButton) this.stopButton.interactable = spinning;
+
+    // 調注相關在轉動中不可按
+    if (this.betMinus) this.betMinus.interactable = !spinning;
+    if (this.betPlus) this.betPlus.interactable = !spinning;
+    if (this.maxBet) this.maxBet.interactable = !spinning;
+
+    // Auto 在轉動中也可按（允許中途關閉）
+    if (this.autoBtn) this.autoBtn.interactable = true;
+  }
+
+  private _setupToastOpacity() {
+    if (!this.winToastLabel) return;
+    const node = this.winToastLabel.node;
+    let uiop = node.getComponent(UIOpacity);
+    if (!uiop) uiop = node.addComponent(UIOpacity);
+    uiop.opacity = 0;
+  }
+
+  private _showWinMessage(symbolId: number, count: number, payout: number) {
+    if (this.messageConfig && symbolId >= 0 && count >= 3) {
+      const msg = this.messageConfig.getMessage(symbolId, count, payout);
+      this._showToast(msg);
+    } else {
+      // 後備訊息：若未連到 WinMessageConfig 或 count < 3
+      this._showToast(`${this.winPrefix}${payout}`);
     }
   }
 
-  public roundFinished(win: number, detail: WinDetail) {
-    this.lastWin = win;
-    this.balance += win;
-    this.spinning = false;
-    this.refreshUI();
-    this.updateButtons();
-
-    if (win > 0) {
-      const text = detail
-        ? `中獎！符號 #${detail.symbol} ×${detail.count} → +${detail.payout}`
-        : `中獎！+${win}`;
-      this.showWinToast(text);
-    }
-
-    // Auto 續轉：若 auto 開著且餘額足夠，延遲後自動再轉
-    if (this.autoEnabled) {
-      const totalBet = this.betPerLine * this.linesCount;
-      if (this.balance >= totalBet) {
-        this.scheduleOnce(() => {
-          if (this.autoEnabled && !this.spinning) this.onSpin();
-        }, this.autoDelaySec);
-      } else {
-        console.warn('Auto 已停止：餘額不足');
-        this.autoEnabled = false;
-        this.updateButtons();
-      }
-    }
-  }
-
-  private showWinToast(text: string) {
-    if (!this.winToastNode || !this.winToastLabel) return;
+  private _showToast(text: string) {
+    if (!this.winToastLabel) return;
     this.winToastLabel.string = text;
 
-    const op = this.winToastNode.getComponent(UIOpacity) || this.winToastNode.addComponent(UIOpacity);
-    tween(op)
-      .to(0.15, { opacity: 255 })
-      .delay(1.2)
-      .to(0.25, { opacity: 0 })
+    const node = this.winToastLabel.node;
+    let uiop = node.getComponent(UIOpacity);
+    if (!uiop) uiop = node.addComponent(UIOpacity);
+    uiop.opacity = 0;
+
+    tween(uiop)
+      .to(0.12, { opacity: 255 })
+      .delay(this.toastSeconds)
+      .to(0.18, { opacity: 0 })
       .start();
-  }
-
-  private refreshUI() {
-    if (this.balanceLabel) this.balanceLabel.string = `餘額：${this.balance}`;
-    if (this.betLabel) this.betLabel.string = `押注：${this.betPerLine * this.linesCount}`;
-    if (this.winLabel) this.winLabel.string = `贏分：${this.lastWin}`;
-  }
-
-  private updateButtons() {
-    // Auto 開啟時，鎖住 Spin 與 Bet 調整；Stop 在旋轉時可用
-    const canSpin = !this.spinning && !this.autoEnabled;
-    const canStop = this.spinning || this.autoEnabled;
-
-    if (this.spinButton) this.spinButton.interactable = canSpin;
-    if (this.stopButton) this.stopButton.interactable = canStop;
-
-    const betLocked = this.spinning || this.autoEnabled;
-    if (this.betMinus) this.betMinus.interactable = !betLocked;
-    if (this.betPlus) this.betPlus.interactable = !betLocked;
-    if (this.maxBet) this.maxBet.interactable = !betLocked;
-
-    if (this.autoBtn) {
-      // Auto 按鈕總是可點擊，用來切換
-      this.autoBtn.interactable = true;
-      // 嘗試改變按鈕文字提示
-      const label = this.autoBtn.getComponentInChildren(Label);
-      if (label) label.string = this.autoEnabled ? 'Auto: ON' : 'Auto';
-    }
   }
 }
